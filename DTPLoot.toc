@@ -1,0 +1,6 @@
+## Interface: 20400
+## Title : DTP Loot
+## Notes: /roll loot system with bounty- and rank-based bonuses.
+## Author: Bwafen
+## SavedVariables: DTPLootBonusDB
+DTPLoot.lua
