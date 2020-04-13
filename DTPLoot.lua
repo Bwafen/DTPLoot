@@ -6,42 +6,40 @@ local DTPRollDB = {}
 -- Definitions --
 
 -- Looks for guild members without DB entries, fills accordingly.
-local function update()
+local function updateRoster()
     SetGuildRosterShowOffline(true)
     GuildRoster()
-    --SendChatMessage(GetNumGuildMembers(),"WHISPER", nil, UnitName("player"))
+    DEFAULT_CHAT_FRAME:AddMessage(GetNumGuildMembers().." guild members found. Updating.")
+    local msg = "" 
     for i=1,GetNumGuildMembers() do
-    local name,rank = GetGuildRosterInfo(i)
-    local msg = ""         
+        local name,rank = GetGuildRosterInfo(i)
+        local rb = (rank == "Raider" or rank == "Shadow Council") and 0 or 0
         if not DTPLootBonusDB[name] then                               
-            local rb = (rank == "Shadow Council") and 7 or 0
             DTPLootBonusDB[name] = {["rankBonus"]=rb, ["bountyBonus"]=0}
             msg = msg..name..", "
+        else
+            DTPLootBonusDB[name].rankBonus = rb
         end
     end
-    SenChatMessage("New members detected:","WHISPER", nil, UnitName("player"))
-    SendChatMessage(msg,"WHISPER", nil, UnitName("player"))
+    if msg ~= "" then
+        DEFAULT_CHAT_FRAME:AddMessage("New members detected: "..msg)
+    end
 end
 
--- Resets bounty bonuses
+-- Sets everyone's bouty bonus to zero
 local function resetBonus()
-    SendChatMessage("Resetting bounties.","OFFICER", nil, nil)
-    SetGuildRosterShowOffline(true)    
-    GuildRoster()
     for i=1,GetNumGuildMembers() do
-        local name, rank = GetGuildRosterInfo(i)
+        local name = GetGuildRosterInfo(i)
         DTPLootBonusDB[name].bountyBonus = 0
-        if rank == "Initiate" then
-            DTPLootBonusDB[name].rankBonus = 5
-        end        
     end
+
 end
 
 -- (Re)initializes the loot bonus database
 local function initDB()    
     if not DTPLootBonusDB then
         DTPLootBonusDB = {}
-        SendChatMessage("DB Init","WHISPER", nil, UnitName("player"))
+        DEFAULT_CHAT_FRAME:AddMessage("DB Init")
     end
 end
 
@@ -50,22 +48,63 @@ local function setPlayerBonus(name, amount)
     local msg ="(~\")~ " .. name .."'s bounty bonus set to " .. amount.."."
     if DTPLootBonusDB[name] then
     DTPLootBonusDB[name].bountyBonus = tonumber(amount)
+    SendChatMessage(msg,"GUILD",nil,nil)
+    else 
+        DEFAULT_CHAT_FRAME:AddMessage(name.." not found in guild list.")
     end
-    SendChatMessage(msg,"GUILD", nil, nil)
+    
 end
 
 -- Displays a list of all players with active bounty bonuses
 local function showBonuses()
     SetGuildRosterShowOffline(true)    
-    GuildRoster() 
-    local msg = "Active bounties: "
+    GuildRoster()
+    local msg = ""
     for i=1,GetNumGuildMembers() do
-        local name= GetGuildRosterInfo(i)           
+        local name,rank = GetGuildRosterInfo(i)           
         if DTPLootBonusDB[name].bountyBonus ~=0 then
-            msg = msg.. "<"..name..": " ..DTPLootBonusDB[name].bountyBonus.."> "            
+            msg = msg.. "<"..name..": " ..DTPLootBonusDB[name].bountyBonus.."> "
         end
     end
-    SendChatMessage(msg,"OFFICER", nil, nil)
+    if msg == "" then
+        msg = "None."
+    end
+    SendChatMessage("Active bounties:","OFFICER",nil,nil)
+    SendChatMessage(msg,"OFFICER",nil,nil)                       
+end
+
+-- resets bounties, requests an update in (officer) chat -- SET TO OFFICER ON RELEASE
+function requestUpdate()
+    updateRoster()
+    resetBonus()
+    SendChatMessage("<DTPLoot>Requesting update.","OFFICER", nil,nil)
+    mod.frame:RegisterEvent("CHAT_MSG_OFFICER")
+    mod.frame:SetScript("OnEvent", function(self, event, ...)
+        if event == "CHAT_MSG_OFFICER" then
+            local response,author = ...
+            if author ~= UnitName("player") and string.match(response,"<.+: %d+>.-") then                
+                DEFAULT_CHAT_FRAME:AddMessage("Received response. Proceeding.")
+                for occurence in string.gmatch(response,"<%a+: %d+>") do
+                    local nom, nb = string.match(occurence,"<(%a+): (%d+)>")
+                    DTPLootBonusDB[nom].bountyBonus = tonumber(nb)
+                    DEFAULT_CHAT_FRAME:AddMessage("*"..nom.." --> "..nb.."*")
+                end
+                mod.frame:UnregisterEvent("CHAT_MSG_OFFICER")
+            elseif author ~= UnitName("player") and string.match(response,"None.") then
+                DEFAULT_CHAT_FRAME:AddMessage("Received response. There are no active bounties atm.")
+                mod.frame:UnregisterEvent("CHAT_MSG_OFFICER")
+            end
+        end
+    end)
+end
+
+-- Given a player's name, returns their current loot bonus.
+local function getBonus(author)
+    local bonus = 0
+    if DTPLootBonusDB[author] then -- CHANGE GUILDNAME ON RELEASE
+        bonus = DTPLootBonusDB[author].rankBonus + DTPLootBonusDB[author].bountyBonus
+    end
+    return bonus
 end
 
 -- Displays a chat message asking people to manifest their interest in a linked item.
@@ -74,28 +113,19 @@ local function askForRolls(itemlink)
         if itemlink then
             if string.match(itemlink,"|%w+|Hitem:.+|r") then
                 local str = "Now assigning item ".. itemlink            
-                SendChatMessage(str, "PARTY", nil, nil)
-                SendChatMessage("Please /roll if interested.", "PARTY", nil, nil)
+                SendChatMessage(str, "RAID_WARNING", nil, nil)
+                SendChatMessage("Please /roll for main spec upgrades.", "RAID_WARNING", nil, nil)
                 currentItem = itemlink            
             else
-                SendChatMessage("Invalid argument. Try /dtploot [anItemLink]","WHISPER", nil, UnitName("player"))
+                DEFAULT_CHAT_FRAME:AddMessage("Invalid argument. Try /dtploot [anItemLink]")
             end
         end
     else 
-        SendChatMessage("Another roll is ongoing.","WHISPER", nil, UnitName("player"))
+        DEFAULT_CHAT_FRAME:AddMessage("Another roll is ongoing.")
     end
 end
 
--- Given a player's name, returns their current loot bonus.
-local function getBonus(playername)
-    local bonus = 0
-    if GetGuildInfo(playername) == "Debauchery Tea Party" and DTPLootBonusDB[playername] then -- CHANGE GUILDNAME ON RELEASE
-        bonus = DTPLootBonusDB[playername].rankBonus + DTPLootBonusDB[playername].bountyBonus
-    end
-    return bonus
-end
-
--- Saves rolls into a temp DB
+-- Saves rolls into a temp table
 local function saveScore(name,nb)
     DTPRollDB[name] = nb
 end
@@ -112,7 +142,7 @@ local function findWinner(scores)
     end
     local winners = (scores[w1]==scores[w3]) and {w1,w2,w3} or (scores[w2]==scores[w]) and {w1,w2} or {w1}
         if scores[w1]==scores[w2] then
-            SendChatMessage("Breaking ties...","PARTY", nil, UnitName("player"))
+            SendChatMessage("Breaking ties...","RAID", nil, nil)
         end
     local winner = winners[math.random(getn(winners))]
     return winner, highRoll
@@ -124,7 +154,7 @@ local function endCurrentRoll()
     if currentItem then
         local winner, highRoll = findWinner(DTPRollDB)
         local msg = "<"..winner .. "> awarded " .. currentItem .. " with a roll of " .. highRoll.."."
-        SendChatMessage(msg,"PARTY", nil, UnitName("player"))
+        SendChatMessage(msg,"RAID_WARNING", nil, nil)
     end
     lastItem = currentItem
     currentItem = nil
@@ -137,15 +167,12 @@ end
 mod.frame = CreateFrame("Frame", "DTPLoot", UIParent)
 mod.frame:SetFrameStrata("BACKGROUND")
 
-
 -- Updates guid list when logging out
 mod.frame:RegisterEvent("PLAYER_LOGOUT")
 mod.frame:SetScript("OnEvent", function(self, event, ...)
     initDB()
-    update()
+    updateRoster()
 end)
-
-
 
 ----------------------
 -- Slash commands--
@@ -170,28 +197,31 @@ SlashCmdList["DTP"] = function(arg)
                     local modifiedRoll = tonumber(rollResult) + getBonus(author)
                     local resultMsg = "<"..author..": "..modifiedRoll.."("..rollResult.."+"..getBonus(author)..")>"
                     saveScore(author,modifiedRoll)                    
-                    SendChatMessage(resultMsg,"PARTY", nil, nil)
+                    SendChatMessage(resultMsg,"RAID", nil, nil)
                 end
             end
         end)    
     end    
 end
 
--- Sets a player's bountyBonus, or resets bountyBonus for all players.
+-- Sets a player's bountyBonus, resets bountyBonus for all players, or requests updated bounty list.
 SLASH_DTPBONUS1 = "/dtpbonus"   
 SLASH_DTPBONUS2 = "/dtpdb"                
 SlashCmdList["DTPBONUS"] = function(argstring)
     if argstring then
         if argstring == "reset" then
+            updateRoster()
             resetBonus()
-        elseif argstring == "show" or argstring == "all" then
+        elseif argstring == "update" then
+            requestUpdate()
+        elseif argstring == "show" or argstring == "all" or argstring == "list" then
             showBonuses()
         elseif  string.match(argstring,"%a+%s%d+") then
             local playerName = string.match(argstring, "%a+")
             local amount = string.match(argstring, "%d+")   
             setPlayerBonus(playerName,amount)
         else
-            SendChatMessage("Invalid argument. Try /dtpbonus aPLayerName aNumber","WHISPER", nil, UnitName("player")) 
+            DEFAULT_CHAT_FRAME:AddMessage("Invalid argument. Try \'list\', \'update\', \'reset\', or \'playername number\'.")
         end
     end
 end
@@ -200,18 +230,23 @@ end
 --[[
 SLASH_DTPTEST1 = "/dtptest"
 SlashCmdList["DTPTEST"] = function()    
-    local msg = DTPLootBonusDB[UnitName("player")].bountyBonus + DTPLootBonusDB[UnitName("player")].rankBonus
-    SendChatMessage(msg,"WHISPER", nil, UnitName("player"))
+    requestUpdate()
 end
 
 SLASH_DTPGUILD1 = "/dtpg"
 SlashCmdList["DTPGUILD"] = function()    
     SetGuildRosterShowOffline(true)
     GuildRoster()
-    SendChatMessage(GetNumGuildMembers(),"WHISPER", nil, UnitName("player"))   
+    DEFAULT_CHAT_FRAME:AddMessage(GetNumGuildMembers())   
     for i=1,GetNumGuildMembers(),1 do
         local name, rank = GetGuildRosterInfo(i)
-        SendChatMessage(name.." - "..rank,"WHISPER", nil, UnitName("player"))        
+        DEFAULT_CHAT_FRAME:AddMessage(name.." - "..rank)        
     end    
 end
 ]]--
+
+
+
+
+
+
