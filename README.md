@@ -39,6 +39,7 @@ Any changes made to bonuses between your last UI reload and a server crash will 
 'tis therefore recommended that you /reloadui after every significant change.
 
 #--- Changelog ---#
+
 v1.2 	- Changed output when nobody rolls on an item.
 	- Set bonus for raiders/corrupted officers to 10.
 	- Bugs for the bug lord.
