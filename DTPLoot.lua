@@ -13,7 +13,7 @@ local function updateRoster()
     local msg = "" 
     for i=1,GetNumGuildMembers() do
         local name,rank = GetGuildRosterInfo(i)
-        local rb = (rank == "Raider" or rank == "Shadow Council") and 0 or 0
+        local rb = (rank == "Raider" or rank == "Shadow Council") and 10 or 0
         if not DTPLootBonusDB[name] then                               
             DTPLootBonusDB[name] = {["rankBonus"]=rb, ["bountyBonus"]=0}
             msg = msg..name..", "
@@ -127,13 +127,13 @@ end
 
 -- Saves rolls into a temp table
 local function saveScore(name,nb)
-    DTPRollDB[name] = nb
+    DTPRollDB[name] = nb    
 end
 
 -- Finds out who gets the purple
 local function findWinner(scores)  
     local highRoll = 0
-    local w1,w2,w3 = "", "", ""
+    local w1,w2,w3 = "","",""
     for key,value in pairs(scores) do
         if value >= highRoll then
             highRoll = value
@@ -152,9 +152,18 @@ end
 local function endCurrentRoll()
     mod.frame:UnregisterEvent("CHAT_MSG_SYSTEM")
     if currentItem then
-        local winner, highRoll = findWinner(DTPRollDB)
-        local msg = "<"..winner .. "> awarded " .. currentItem .. " with a roll of " .. highRoll.."."
-        SendChatMessage(msg,"RAID_WARNING", nil, nil)
+        local msg, count = "",0
+        for _ in pairs(DTPRollDB) do -- Because fuck you, lua.
+            count=count+1
+        end        
+    	if count == 0 then
+    		msg = "Nobody rolled. " .. currentItem .. " going to offspec/disenchant."
+    	else
+        	local winner, highRoll = findWinner(DTPRollDB)
+        	DTPRollDB = {}
+        	msg = "<".. winner .. "> awarded " .. currentItem .. " with a roll of " .. highRoll.."."
+    	end
+    	SendChatMessage(msg,"RAID_WARNING", nil, nil)
     end
     lastItem = currentItem
     currentItem = nil
@@ -184,7 +193,7 @@ SLASH_DTP2 = "/dtproll"
 SlashCmdList["DTP"] = function(arg)
     local alreadyRolled = {}
     if arg == "end" then
-    endCurrentRoll()
+        endCurrentRoll()
     else
         askForRolls(arg)               
         mod.frame:RegisterEvent("CHAT_MSG_SYSTEM")
@@ -232,6 +241,7 @@ SLASH_DTPTEST1 = "/dtptest"
 SlashCmdList["DTPTEST"] = function()    
     requestUpdate()
 end
+]]--
 
 SLASH_DTPGUILD1 = "/dtpg"
 SlashCmdList["DTPGUILD"] = function()    
@@ -243,10 +253,3 @@ SlashCmdList["DTPGUILD"] = function()
         DEFAULT_CHAT_FRAME:AddMessage(name.." - "..rank)        
     end    
 end
-]]--
-
-
-
-
-
-
