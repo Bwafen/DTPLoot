@@ -9,22 +9,34 @@ local DTPRollDB = {}
 local function updateRoster()
     SetGuildRosterShowOffline(true)
     GuildRoster()
+    local guild = {}
     DEFAULT_CHAT_FRAME:AddMessage(GetNumGuildMembers().." guild members found. Updating.")
-    local msg = "" 
+    local msg1, msg2 = "", "" 
     for i=1,GetNumGuildMembers() do
         local name,rank = GetGuildRosterInfo(i)
+        guild[name] = rank
         local rb = (rank == "Raider" or rank == "Shadow Council") and 10 or 0
         if not DTPLootBonusDB[name] then                               
             DTPLootBonusDB[name] = {["rankBonus"]=rb, ["bountyBonus"]=0}
-            msg = msg..name..", "
+            msg1 = msg1..name..", "
         else
             DTPLootBonusDB[name].rankBonus = rb
         end
     end
-    if msg ~= "" then
-        DEFAULT_CHAT_FRAME:AddMessage("New members detected: "..msg)
+    for key in pairs(DTPLootBonusDB) do
+        if not guild[key] then
+            msg2 = msg2..key..", "
+            DTPLootBonusDB[key] = nil
+        end
+    end
+    if msg1 ~= "" then
+        DEFAULT_CHAT_FRAME:AddMessage("New members detected: "..msg1)
+    end
+    if msg2 ~= "" then
+        DEFAULT_CHAT_FRAME:AddMessage("Removed from database: "..msg2)
     end
 end
+
 
 -- Sets everyone's bouty bonus to zero
 local function resetBonus()
@@ -57,8 +69,8 @@ end
 
 -- Displays a list of all players with active bounty bonuses
 local function showBonuses()
-    SetGuildRosterShowOffline(true)    
-    GuildRoster()
+    --SetGuildRosterShowOffline(true)    
+    --GuildRoster()
     local msg = ""
     for i=1,GetNumGuildMembers() do
         local name,rank = GetGuildRosterInfo(i)           
@@ -114,7 +126,7 @@ local function askForRolls(itemlink)
             if string.match(itemlink,"|%w+|Hitem:.+|r") then
                 local str = "Now assigning item ".. itemlink            
                 SendChatMessage(str, "RAID_WARNING", nil, nil)
-                SendChatMessage("Please /roll for main spec upgrades.", "RAID_WARNING", nil, nil)
+            SendChatMessage("Please /roll for main spec upgrades.", "RAID_WARNING", nil, nil)
                 currentItem = itemlink            
             else
                 DEFAULT_CHAT_FRAME:AddMessage("Invalid argument. Try /dtploot [anItemLink]")
@@ -160,11 +172,12 @@ local function endCurrentRoll()
     		msg = "Nobody rolled. " .. currentItem .. " going to offspec/disenchant."
     	else
         	local winner, highRoll = findWinner(DTPRollDB)
-        	DTPRollDB = {}
+        	--
         	msg = "<".. winner .. "> awarded " .. currentItem .. " with a roll of " .. highRoll.."."
     	end
     	SendChatMessage(msg,"RAID_WARNING", nil, nil)
     end
+    DTPRollDB = {}
     lastItem = currentItem
     currentItem = nil
 end
@@ -224,6 +237,7 @@ SlashCmdList["DTPBONUS"] = function(argstring)
         elseif argstring == "update" then
             requestUpdate()
         elseif argstring == "show" or argstring == "all" or argstring == "list" then
+            updateRoster()
             showBonuses()
         elseif  string.match(argstring,"%a+%s%d+") then
             local playerName = string.match(argstring, "%a+")
@@ -236,13 +250,13 @@ SlashCmdList["DTPBONUS"] = function(argstring)
 end
 
 -- Test purposes only. Do not use.
---[[
+--
 SLASH_DTPTEST1 = "/dtptest"
 SlashCmdList["DTPTEST"] = function()    
-    requestUpdate()
+    updateRoster()
 end
-]]--
 
+-- Prints a list of your guild members
 SLASH_DTPGUILD1 = "/dtpg"
 SlashCmdList["DTPGUILD"] = function()    
     SetGuildRosterShowOffline(true)
